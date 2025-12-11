@@ -928,6 +928,18 @@ def generate_html_report(output_path):
             color: #764ba2;
         }}
         
+        .table-responsive {{
+            overflow-x: auto;
+            margin-bottom: 30px;
+        }}
+        
+        .table-title {{
+            font-size: 1.1em;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }}
+        
         .method-item {{
             background: #f8f9ff;
             padding: 15px;
@@ -1024,11 +1036,54 @@ def generate_html_report(output_path):
             }}
             
             table {{
-                font-size: 0.9em;
+                font-size: 0.85em;
             }}
             
             th, td {{
-                padding: 10px;
+                padding: 8px;
+            }}
+            
+            .table-responsive {{
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }}
+            
+            table {{
+                min-width: 500px;
+            }}
+            
+            h2 {{
+                font-size: 1.3em;
+            }}
+            
+            h3 {{
+                font-size: 1.1em;
+            }}
+        }}
+        
+        @media (max-width: 480px) {{
+            header h1 {{
+                font-size: 1.4em;
+            }}
+            
+            main {{
+                padding: 15px;
+            }}
+            
+            table {{
+                font-size: 0.75em;
+            }}
+            
+            th, td {{
+                padding: 6px;
+            }}
+            
+            .stat-card {{
+                padding: 15px;
+            }}
+            
+            .stat-card .number {{
+                font-size: 2em;
             }}
         }}
     </style>
@@ -1083,16 +1138,26 @@ def generate_html_report(output_path):
                 <h2>🗄️ Classes de Entidades/Objetos de Persistência</h2>
                 <p><strong>Total encontrado:</strong> <span class="badge badge-info">{len(entity_classes)}</span></p>
                 <p>Classes identificadas pela presença de anotações JPA/Hibernate comuns (<code>@Entity</code>, <code>@Table</code>).</p>
-                <div class="file-list">
-                    <ul>
+                <div class="table-responsive">
+                    <div class="table-title">Detalhes das Classes de Entidades</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Caminho do Arquivo</th>
+                                <th>Padrões Detectados</th>
+                            </tr>
+                        </thead>
+                        <tbody>
 """
     
-    # Adicionar entidades
-    for filepath in entity_classes.keys():
+    # Adicionar entidades em tabela
+    for filepath, patterns in entity_classes.items():
         relative_path = os.path.relpath(filepath, PROJECT_PATH)
-        html += f'                        <li><code>{escape_html(relative_path)}</code></li>\n'
+        patterns_str = ', '.join(patterns) if patterns else 'N/A'
+        html += f'                            <tr><td><code>{escape_html(relative_path)}</code></td><td>{escape_html(patterns_str)}</td></tr>\n'
     
-    html += """                    </ul>
+    html += """                        </tbody>
+                    </table>
                 </div>
             </section>
             
@@ -1101,16 +1166,26 @@ def generate_html_report(output_path):
                 <h2>🔧 Classes de Componentes de Negócio/Controladoras</h2>
                 <p><strong>Total encontrado:</strong> <span class="badge badge-success">{}</span></p>
                 <p>Classes identificadas por anotações comuns de injeção/gerenciamento (<code>@Named</code>, <code>@Controller</code>, etc.).</p>
-                <div class="file-list">
-                    <ul>
+                <div class="table-responsive">
+                    <div class="table-title">Detalhes dos Componentes de Negócio</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Caminho do Arquivo</th>
+                                <th>Anotações Detectadas</th>
+                            </tr>
+                        </thead>
+                        <tbody>
 """.format(len(business_components))
     
-    # Adicionar componentes
-    for filepath in business_components.keys():
+    # Adicionar componentes em tabela
+    for filepath, patterns in business_components.items():
         relative_path = os.path.relpath(filepath, PROJECT_PATH)
-        html += f'                        <li><code>{escape_html(relative_path)}</code></li>\n'
+        patterns_str = ', '.join(patterns) if patterns else 'N/A'
+        html += f'                            <tr><td><code>{escape_html(relative_path)}</code></td><td>{escape_html(patterns_str)}</td></tr>\n'
     
-    html += """                    </ul>
+    html += """                        </tbody>
+                    </table>
                 </div>
             </section>
             
@@ -1119,17 +1194,26 @@ def generate_html_report(output_path):
                 <h2>🖼️ Páginas JSF (XHTML)</h2>
                 <p><strong>Total encontrado:</strong> <span class="badge badge-warning">{}</span></p>
                 <p>Arquivos de view utilizados em aplicações JSF.</p>
-                <div class="file-list">
-                    <ul>
+                <div class="table-responsive">
+                    <div class="table-title">Detalhes das Páginas JSF</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Caminho do Arquivo</th>
+                                <th>Tipo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
 """.format(len(jsf_pages))
     
-    # Adicionar páginas JSF
+    # Adicionar páginas JSF em tabela
     for filepath in jsf_pages:
         relative_path = os.path.relpath(filepath, PROJECT_PATH)
-        html += f'                        <li><code>{escape_html(relative_path)}</code></li>\n'
+        file_type = os.path.splitext(filepath)[1]
+        html += f'                            <tr><td><code>{escape_html(relative_path)}</code></td><td>{escape_html(file_type)}</td></tr>\n'
     
-    # SEÇÃO 5: ANÁLISE DE REGRAS DE NEGÓCIO
-    html += """                    </ul>
+    html += """                        </tbody>
+                    </table>
                 </div>
             </section>
             
@@ -1159,21 +1243,69 @@ def generate_html_report(output_path):
                 </div>
 """
         
+        # Controllers com regras
+        controllers = business_rules_metrics.get('controllers', [])
+        if controllers:
+            html += """                <h3>Controllers com Regras de Negócio</h3>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Classe</th>
+                                <th>Arquivo</th>
+                                <th>Métodos Públicos</th>
+                                <th>Métodos com Regras</th>
+                                <th>Nomes dos Métodos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+"""
+            for controller in controllers:
+                rel_path = os.path.relpath(controller.file_path, PROJECT_PATH)
+                methods_str = ', '.join(controller.business_method_names) if controller.business_method_names else '-'
+                html += f"""                            <tr>
+                                <td><strong>{escape_html(controller.class_name)}</strong></td>
+                                <td><code>{escape_html(rel_path)}</code></td>
+                                <td>{controller.public_methods}</td>
+                                <td><span class="badge badge-success">{controller.business_methods}</span></td>
+                                <td>{escape_html(methods_str)}</td>
+                            </tr>
+"""
+            html += """                        </tbody>
+                    </table>
+                </div>
+"""
+        
         # Services com regras
         services = business_rules_metrics.get('services', [])
         if services:
-            html += "                <h3>Services com Regras de Negócio</h3>\n"
+            html += """                <h3>Services com Regras de Negócio</h3>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Classe</th>
+                                <th>Arquivo</th>
+                                <th>Métodos Públicos</th>
+                                <th>Métodos com Regras</th>
+                                <th>Nomes dos Métodos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+"""
             for service in services:
                 rel_path = os.path.relpath(service.file_path, PROJECT_PATH)
-                methods_str = ', '.join(service.business_method_names) if service.business_method_names else 'Nenhum'
-                html += f"""                <div class="method-item">
-                    <h4>{escape_html(service.class_name)}</h4>
-                    <div class="details">
-                        <strong>Arquivo:</strong> {escape_html(rel_path)}<br>
-                        <strong>Métodos Públicos:</strong> {service.public_methods}<br>
-                        <strong>Métodos com Regras:</strong> <span class="badge badge-success">{service.business_methods}</span>
-                    </div>
-                    <div class="methods"><strong>Métodos:</strong> {escape_html(methods_str)}</div>
+                methods_str = ', '.join(service.business_method_names) if service.business_method_names else '-'
+                html += f"""                            <tr>
+                                <td><strong>{escape_html(service.class_name)}</strong></td>
+                                <td><code>{escape_html(rel_path)}</code></td>
+                                <td>{service.public_methods}</td>
+                                <td><span class="badge badge-success">{service.business_methods}</span></td>
+                                <td>{escape_html(methods_str)}</td>
+                            </tr>
+"""
+            html += """                        </tbody>
+                    </table>
                 </div>
 """
     else:

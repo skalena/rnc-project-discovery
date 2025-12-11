@@ -564,6 +564,33 @@ Contains 6 worksheets:
    - Summary statistics with averages
 6. **Analysis Log** - Detailed execution log
 
+#### HTML Report (`rnc-{project-name}.html`)
+
+Professional, responsive HTML report with embedded CSS:
+
+- **Header Section** - Project name, analysis date, and file path
+- **Executive Summary** - Key metrics displayed as interactive cards
+- **Entity Classes** - Complete list of JPA/Hibernate entities
+- **Business Components** - All detected services, controllers, and beans
+- **JSF Pages** - All view files discovered
+- **Business Rules Analysis** - Detailed business logic metrics with:
+  - Total classes analyzed
+  - Controllers and Services statistics
+  - Methods with business logic
+  - Average metrics per component type
+  - Service details with specific method names
+- **Execution Log** - Terminal-style log viewer
+- **Responsive Design** - Works on desktop, tablet, and mobile devices
+- **Modern Styling** - Gradient backgrounds, smooth animations, professional layout
+
+**Features:**
+- ✨ No external dependencies (CSS embedded)
+- 📱 Fully responsive and mobile-friendly
+- 🎨 Professional color scheme with accessibility in mind
+- 🔍 Easy navigation and section management
+- 📊 Interactive statistics dashboard
+- 🖥️ Works offline (single HTML file)
+
 ## Troubleshooting
 
 ### Issue: "Project path not found"
