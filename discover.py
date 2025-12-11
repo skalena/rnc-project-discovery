@@ -723,8 +723,493 @@ def generate_markdown_report(output_path):
 
     return report, report_filename
 
+def generate_html_report(output_path):
+    """Gera um relatório HTML profissional com CSS incorporado."""
+    folder_name = os.path.basename(os.path.abspath(PROJECT_PATH))
+    html_filename = os.path.join(output_path, f"rnc-{folder_name}.html")
+    
+    # Escape HTML entities
+    def escape_html(text):
+        return str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;').replace("'", '&#39;')
+    
+    html = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RNC Project Discovery - {escape_html(folder_name)}</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }}
+        
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            overflow: hidden;
+        }}
+        
+        header {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }}
+        
+        header h1 {{
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }}
+        
+        .meta-info {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+            font-size: 0.95em;
+            opacity: 0.95;
+        }}
+        
+        .meta-info div {{
+            background: rgba(255,255,255,0.1);
+            padding: 10px 15px;
+            border-radius: 6px;
+            backdrop-filter: blur(10px);
+        }}
+        
+        .meta-info strong {{
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        
+        main {{
+            padding: 40px;
+        }}
+        
+        section {{
+            margin-bottom: 50px;
+        }}
+        
+        h2 {{
+            font-size: 1.8em;
+            color: #667eea;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }}
+        
+        h3 {{
+            font-size: 1.3em;
+            color: #764ba2;
+            margin: 25px 0 15px 0;
+            margin-top: 30px;
+        }}
+        
+        .stats-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }}
+        
+        .stat-card {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.3);
+            transition: transform 0.3s ease;
+        }}
+        
+        .stat-card:hover {{
+            transform: translateY(-5px);
+        }}
+        
+        .stat-card .number {{
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }}
+        
+        .stat-card .label {{
+            font-size: 0.9em;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }}
+        
+        thead {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }}
+        
+        th {{
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 0.5px;
+        }}
+        
+        td {{
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+        }}
+        
+        tbody tr:hover {{
+            background: #f8f9ff;
+        }}
+        
+        tbody tr:last-child td {{
+            border-bottom: none;
+        }}
+        
+        .file-list {{
+            background: #f8f9ff;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }}
+        
+        .file-list ul {{
+            list-style: none;
+            margin-left: 0;
+        }}
+        
+        .file-list li {{
+            padding: 8px 0;
+            border-bottom: 1px solid #ddd;
+        }}
+        
+        .file-list li:last-child {{
+            border-bottom: none;
+        }}
+        
+        .file-list code {{
+            background: white;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #764ba2;
+        }}
+        
+        .method-item {{
+            background: #f8f9ff;
+            padding: 15px;
+            border-left: 4px solid #764ba2;
+            margin-bottom: 15px;
+            border-radius: 6px;
+        }}
+        
+        .method-item h4 {{
+            color: #764ba2;
+            margin-bottom: 8px;
+        }}
+        
+        .method-item .details {{
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }}
+        
+        .method-item .methods {{
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            color: #667eea;
+        }}
+        
+        .log-box {{
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 20px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            line-height: 1.5;
+            border: 2px solid #333;
+        }}
+        
+        footer {{
+            background: #f5f7fa;
+            padding: 30px 40px;
+            text-align: center;
+            color: #666;
+            border-top: 1px solid #ddd;
+            font-size: 0.9em;
+        }}
+        
+        .icon {{
+            display: inline-block;
+            margin-right: 8px;
+        }}
+        
+        .badge {{
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-right: 8px;
+            margin-top: 8px;
+        }}
+        
+        .badge-success {{
+            background: #d4edda;
+            color: #155724;
+        }}
+        
+        .badge-info {{
+            background: #d1ecf1;
+            color: #0c5460;
+        }}
+        
+        .badge-warning {{
+            background: #fff3cd;
+            color: #856404;
+        }}
+        
+        @media (max-width: 768px) {{
+            header h1 {{
+                font-size: 1.8em;
+            }}
+            
+            main {{
+                padding: 20px;
+            }}
+            
+            .stats-grid {{
+                grid-template-columns: 1fr;
+            }}
+            
+            table {{
+                font-size: 0.9em;
+            }}
+            
+            th, td {{
+                padding: 10px;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 RNC Project Discovery</h1>
+            <p>Análise Estática de Projeto Java e JSF</p>
+            <div class="meta-info">
+                <div>
+                    <strong>Projeto</strong>
+                    {escape_html(folder_name)}
+                </div>
+                <div>
+                    <strong>Data Análise</strong>
+                    {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+                </div>
+                <div>
+                    <strong>Caminho</strong>
+                    {escape_html(PROJECT_PATH)}
+                </div>
+            </div>
+        </header>
+        
+        <main>
+            <!-- SEÇÃO 1: RESUMO EXECUTIVO -->
+            <section>
+                <h2>📈 Resumo Executivo</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="number">{len(entity_classes)}</div>
+                        <div class="label">Classes de Entidades</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number">{len(business_components)}</div>
+                        <div class="label">Componentes de Negócio</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number">{len(jsf_pages)}</div>
+                        <div class="label">Páginas JSF</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number">{business_rules_metrics.get('total_business_methods', 0)}</div>
+                        <div class="label">Métodos com Regras</div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- SEÇÃO 2: CLASSES DE ENTIDADES -->
+            <section>
+                <h2>🗄️ Classes de Entidades/Objetos de Persistência</h2>
+                <p><strong>Total encontrado:</strong> <span class="badge badge-info">{len(entity_classes)}</span></p>
+                <p>Classes identificadas pela presença de anotações JPA/Hibernate comuns (<code>@Entity</code>, <code>@Table</code>).</p>
+                <div class="file-list">
+                    <ul>
+"""
+    
+    # Adicionar entidades
+    for filepath in entity_classes.keys():
+        relative_path = os.path.relpath(filepath, PROJECT_PATH)
+        html += f'                        <li><code>{escape_html(relative_path)}</code></li>\n'
+    
+    html += """                    </ul>
+                </div>
+            </section>
+            
+            <!-- SEÇÃO 3: COMPONENTES DE NEGÓCIO -->
+            <section>
+                <h2>🔧 Classes de Componentes de Negócio/Controladoras</h2>
+                <p><strong>Total encontrado:</strong> <span class="badge badge-success">{}</span></p>
+                <p>Classes identificadas por anotações comuns de injeção/gerenciamento (<code>@Named</code>, <code>@Controller</code>, etc.).</p>
+                <div class="file-list">
+                    <ul>
+""".format(len(business_components))
+    
+    # Adicionar componentes
+    for filepath in business_components.keys():
+        relative_path = os.path.relpath(filepath, PROJECT_PATH)
+        html += f'                        <li><code>{escape_html(relative_path)}</code></li>\n'
+    
+    html += """                    </ul>
+                </div>
+            </section>
+            
+            <!-- SEÇÃO 4: PÁGINAS JSF -->
+            <section>
+                <h2>🖼️ Páginas JSF (XHTML)</h2>
+                <p><strong>Total encontrado:</strong> <span class="badge badge-warning">{}</span></p>
+                <p>Arquivos de view utilizados em aplicações JSF.</p>
+                <div class="file-list">
+                    <ul>
+""".format(len(jsf_pages))
+    
+    # Adicionar páginas JSF
+    for filepath in jsf_pages:
+        relative_path = os.path.relpath(filepath, PROJECT_PATH)
+        html += f'                        <li><code>{escape_html(relative_path)}</code></li>\n'
+    
+    # SEÇÃO 5: ANÁLISE DE REGRAS DE NEGÓCIO
+    html += """                    </ul>
+                </div>
+            </section>
+            
+            <!-- SEÇÃO 5: ANÁLISE DE REGRAS DE NEGÓCIO -->
+            <section>
+                <h2>🧠 Análise de Regras de Negócio</h2>
+"""
+    
+    if business_rules_metrics and HAS_JAVALANG:
+        html += f"""                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="number">{business_rules_metrics.get('total_classes', 0)}</div>
+                        <div class="label">Classes Analisadas</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number">{business_rules_metrics.get('total_controllers', 0)}</div>
+                        <div class="label">Controllers</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number">{business_rules_metrics.get('total_services', 0)}</div>
+                        <div class="label">Services</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number">{business_rules_metrics.get('avg_business_methods_per_service', 0):.2f}</div>
+                        <div class="label">Média por Service</div>
+                    </div>
+                </div>
+"""
+        
+        # Services com regras
+        services = business_rules_metrics.get('services', [])
+        if services:
+            html += "                <h3>Services com Regras de Negócio</h3>\n"
+            for service in services:
+                rel_path = os.path.relpath(service.file_path, PROJECT_PATH)
+                methods_str = ', '.join(service.business_method_names) if service.business_method_names else 'Nenhum'
+                html += f"""                <div class="method-item">
+                    <h4>{escape_html(service.class_name)}</h4>
+                    <div class="details">
+                        <strong>Arquivo:</strong> {escape_html(rel_path)}<br>
+                        <strong>Métodos Públicos:</strong> {service.public_methods}<br>
+                        <strong>Métodos com Regras:</strong> <span class="badge badge-success">{service.business_methods}</span>
+                    </div>
+                    <div class="methods"><strong>Métodos:</strong> {escape_html(methods_str)}</div>
+                </div>
+"""
+    else:
+        html += "                <p><em>⚠️ Análise de regras de negócio não disponível (javalang não instalado).</em></p>\n"
+    
+    # SEÇÃO 6: LOG
+    html += f"""            </section>
+            
+            <!-- SEÇÃO 6: LOG DE EXECUÇÃO -->
+            <section>
+                <h2>📋 Log de Execução</h2>
+                <div class="log-box">{escape_html(analysis_log)}</div>
+            </section>
+        </main>
+        
+        <footer>
+            <p>📊 Relatório gerado automaticamente por RNC Project Discovery</p>
+            <p style="margin-top: 10px; font-size: 0.85em; color: #999;">
+                Versão 1.0 | {datetime.now().strftime('%d de %B de %Y às %H:%M:%S')}
+            </p>
+        </footer>
+    </div>
+</body>
+</html>
+"""
+    
+    try:
+        with open(html_filename, 'w', encoding='utf-8') as f:
+            f.write(html)
+        return html_filename
+    except Exception as e:
+        print(f"❌ Erro ao gerar relatório HTML: {e}")
+        return None
+
 def save_and_display_report(report_content, md_filename, excel_filename=None):
-    """Salva os relatórios em Markdown e Excel, e exibe o resumo no terminal."""
+    """Salva os relatórios em Markdown, Excel e HTML, e exibe o resumo no terminal."""
     try:
         with open(md_filename, 'w', encoding='utf-8') as f:
             f.write(report_content)
@@ -734,6 +1219,12 @@ def save_and_display_report(report_content, md_filename, excel_filename=None):
 
     if excel_filename:
         print(f"✅ Relatório Excel salvo em: {excel_filename}")
+
+    # Gerar HTML
+    output_path = os.path.dirname(md_filename)
+    html_filename = generate_html_report(output_path)
+    if html_filename:
+        print(f"✅ Relatório HTML salvo em: {html_filename}")
 
     print("\n" + "="*80)
     print("RESUMO DA ANÁLISE ESTATICA")
