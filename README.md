@@ -270,43 +270,88 @@ ls -la output/
 
 ## Docker Hub
 
-### Push to Docker Hub
+### Push to Docker Hub (Multi-Platform)
 
-To share your Docker image, use the provided push script:
+The `push-to-docker-hub.sh` script automatically builds and pushes multi-platform images to Docker Hub:
 
 ```bash
+# Push latest tag to Docker Hub (builds for amd64, arm64, arm/v7)
 ./push-to-docker-hub.sh
-```
 
-Or with a specific version tag:
-
-```bash
+# Or with a specific version tag
 ./push-to-docker-hub.sh v1.0.0
 ```
 
-### Multi-Architecture Push to Docker Hub
+**What it does:**
+1. ✅ Checks Docker buildx availability (creates builder if needed)
+2. ✅ Verifies Docker Hub login
+3. ✅ Builds image for multiple platforms: `linux/amd64`, `linux/arm64`, `linux/arm/v7`
+4. ✅ Pushes all platform images to Docker Hub
+5. ✅ Provides verification commands
 
-To build and push multi-platform images to Docker Hub:
+**Requirements:**
+- Docker Desktop (Mac/Windows) or Docker with buildx installed
+- Logged in to Docker Hub (`docker login`)
+- Internet connection for pushing
 
-#### 1. Create/Setup a Builder (one-time setup)
+**Example output:**
+```
+🐳 Multi-Platform Docker Hub Push Script
+========================================
 
-```bash
-docker buildx create --name multiarch-builder
-docker buildx use multiarch-builder
+Configuration:
+  Docker Hub User: skalena
+  Image Name:     rnc-discover
+  Tag:            latest
+  Remote Image:   skalena/rnc-discover:latest
+  Platforms:      linux/amd64,linux/arm64,linux/arm/v7
+
+✅ Using existing builder: multiarch-builder
+✅ Docker Hub login verified
+
+🏗️  Building for platforms: linux/amd64,linux/arm64,linux/arm/v7
+📤 Building and pushing to Docker Hub...
+
+✅ Image built and pushed successfully!
+
+🎉 Done! Your image is now available at:
+   https://hub.docker.com/r/skalena/rnc-discover
 ```
 
-#### 2. Build and Push Multi-Platform Image
+### Advanced: Manual Multi-Architecture Build
+
+For more control over the build process, use the `build-multiarch.sh` script:
 
 ```bash
-# Build for AMD64, ARM64, and ARM/v7, then push to Docker Hub
-docker buildx build \
-  --platform linux/amd64,linux/arm64,linux/arm/v7 \
-  -t skalena/rnc-discover:latest \
-  -t skalena/rnc-discover:v1.0.0 \
-  --push .
+# Build and push to Docker Hub
+./build-multiarch.sh latest push
+
+# Build and push with version tag
+./build-multiarch.sh v1.0.0 push
+
+# Build without pushing (default)
+./build-multiarch.sh latest
+
+# Build for current architecture and load locally
+./build-multiarch.sh latest load
 ```
 
-#### 3. Verify Multi-Platform Image on Docker Hub
+**Script Usage:**
+
+```bash
+./build-multiarch.sh [TAG] [ACTION]
+
+Arguments:
+  TAG     - Docker image tag (default: latest)
+  ACTION  - build, push, or load (default: build)
+
+Examples:
+  ./build-multiarch.sh latest push         # Build and push latest
+  ./build-multiarch.sh v1.0 push          # Build and push v1.0
+  ./build-multiarch.sh latest load        # Build and load locally
+```
+
+### Verify Multi-Platform Image on Docker Hub
 
 ```bash
 docker buildx imagetools inspect skalena/rnc-discover:latest
@@ -337,7 +382,7 @@ If the image is published on Docker Hub:
 docker pull skalena/rnc-discover:latest
 ```
 
-Run the pulled image:
+Run the pulled image (automatically uses correct platform):
 
 ```bash
 docker run --rm -v $(pwd)/my-project:/data skalena/rnc-discover:latest /data
@@ -488,9 +533,11 @@ docker run --rm -it -v $(pwd)/my-project:/data rnc-discover:latest /bin/bash
 rnc-project-discovery/
 ├── discover.py              # Main analysis script
 ├── entrypoint.sh           # Container entry point
-├── Dockerfile              # Docker image definition
+├── Dockerfile              # Multi-platform Docker definition
+├── .dockerignore           # Docker ignore patterns
 ├── Makefile                # Build and run commands
-├── push-to-docker-hub.sh   # Docker Hub push script
+├── push-to-docker-hub.sh   # Multi-platform push script
+├── build-multiarch.sh      # Advanced multi-platform build script
 ├── README.md               # This file
 └── LICENSE                 # License information
 ```

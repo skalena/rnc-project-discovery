@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# Script to tag and push the RNC Discover Docker image to Docker Hub
+# Script to build and push RNC Discover Docker image to Docker Hub (multi-platform)
+# Builds for linux/amd64, linux/arm64, and linux/arm/v7 architectures
 # Usage: ./push-to-docker-hub.sh [TAG]
 # Example: ./push-to-docker-hub.sh latest
 #          ./push-to-docker-hub.sh v1.0.0
@@ -11,44 +12,86 @@ set -e
 IMAGE_NAME="rnc-discover"
 DOCKER_HUB_USER="edgars"
 TAG="${1:-latest}"
-LOCAL_IMAGE="${IMAGE_NAME}:${TAG}"
+PLATFORMS="linux/amd64,linux/arm64,linux/arm/v7"
 REMOTE_IMAGE="${DOCKER_HUB_USER}/${IMAGE_NAME}:${TAG}"
+BUILDER_NAME="multiarch-builder"
 
-echo "🐳 Docker Image Push Script"
-echo "================================"
-echo "Local Image:  ${LOCAL_IMAGE}"
-echo "Remote Image: ${REMOTE_IMAGE}"
+echo "🐳 Multi-Platform Docker Hub Push Script"
+echo "========================================"
+echo ""
+echo "Configuration:"
+echo "  Docker Hub User: ${DOCKER_HUB_USER}"
+echo "  Image Name:     ${IMAGE_NAME}"
+echo "  Tag:            ${TAG}"
+echo "  Remote Image:   ${REMOTE_IMAGE}"
+echo "  Platforms:      ${PLATFORMS}"
 echo ""
 
-# Check if image exists locally
-if ! docker image inspect "${LOCAL_IMAGE}" > /dev/null 2>&1; then
-    echo "❌ Error: Image '${LOCAL_IMAGE}' not found locally"
+# Check if buildx is available
+if ! docker buildx --help &> /dev/null; then
+    echo "❌ Error: Docker buildx is not installed or not available"
     echo ""
-    echo "Please build the image first using:"
-    echo "  make build"
-    echo "  Or: docker build -t ${LOCAL_IMAGE} ."
+    echo "Please ensure you're using:"
+    echo "  - Docker Desktop (Mac/Windows), or"
+    echo "  - Docker with buildx installed on Linux"
+    echo ""
+    echo "To install buildx on Linux:"
+    echo "  https://github.com/docker/buildx#linux-packages"
     exit 1
 fi
 
-# Check if user is logged in to Docker Hub
-if ! docker info 2>/dev/null | grep -q "Username"; then
-    echo "⚠️  Note: You may not be logged into Docker Hub"
-    echo "Please log in first using:"
-    echo "  docker login"
-    echo ""
+# Check if builder exists, create if not
+if ! docker buildx ls | grep -q "$BUILDER_NAME"; then
+    echo "📝 Creating buildx builder: $BUILDER_NAME"
+    docker buildx create --name "$BUILDER_NAME" --use
+    echo "✅ Builder created successfully!"
+else
+    echo "✅ Using existing builder: $BUILDER_NAME"
+    docker buildx use "$BUILDER_NAME"
 fi
 
-# Tag the image
-echo "📝 Tagging image as '${REMOTE_IMAGE}'..."
-docker tag "${LOCAL_IMAGE}" "${REMOTE_IMAGE}"
-echo "✅ Image tagged successfully!"
+echo ""
 
-# Push the image
+# Check if user is logged in to Docker Hub
+# Check if credentials file exists with auths section
+if [ -f ~/.docker/config.json ]; then
+    if grep -q '"auths"' ~/.docker/config.json 2>/dev/null; then
+        echo "✅ Docker credentials file found"
+    else
+        echo "⚠️  Warning: Docker credentials file exists but may not be valid"
+    fi
+else
+    echo "⚠️  Warning: Docker credentials file not found"
+    echo "You may need to run: docker login"
+fi
+
 echo ""
-echo "📤 Pushing image to Docker Hub..."
-docker push "${REMOTE_IMAGE}"
+
+# Bootstrap the builder
+echo "� Bootstrapping builder (this may take a moment)..."
+docker buildx inspect "$BUILDER_NAME" --bootstrap > /dev/null 2>&1
+
 echo ""
-echo "✅ Image pushed successfully!"
+echo "🏗️  Building for platforms: ${PLATFORMS}"
+echo "📤 Building and pushing to Docker Hub..."
+echo ""
+
+# Build and push multi-platform image
+docker buildx build \
+    --platform "${PLATFORMS}" \
+    -t "${REMOTE_IMAGE}" \
+    --push \
+    .
+
+echo ""
+echo "✅ Image built and pushed successfully!"
 echo ""
 echo "🎉 Done! Your image is now available at:"
 echo "   https://hub.docker.com/r/${DOCKER_HUB_USER}/${IMAGE_NAME}"
+echo ""
+echo "📋 To verify multi-platform support:"
+echo "   docker buildx imagetools inspect ${REMOTE_IMAGE}"
+echo ""
+echo "🚀 To pull and use:"
+echo "   docker pull ${REMOTE_IMAGE}"
+echo "   docker run --rm -v \$(pwd)/my-project:/data ${REMOTE_IMAGE} /data"
