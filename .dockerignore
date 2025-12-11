@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+.github
+
+# Documentation
+README.md
+README*.md
+LICENSE
+
+# Development
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+test/
+tests/
+.pytest_cache/
+
+# Output folders (exclude from image)
+output/
+dist/
+build/
+
+# CI/CD
+.github/workflows
+.gitlab-ci.yml
+.travis.yml
+
+# Temporary files
+*.pyc
+__pycache__/
+*.egg-info/
+.env
+.env.local
