@@ -29,7 +29,13 @@ RNC Project Discovery is an automated analysis tool that scans Java projects to 
 - Identifies architectural patterns and components
 - Generates comprehensive analysis reports
 
-🐳 **Docker-Ready**
+� **Business Rules Analysis (AST)**
+- Detects methods with business logic using Abstract Syntax Tree (AST) parsing
+- Identifies control flow, complex operations, and state mutations
+- Calculates average business rule methods per Controller/Service
+- Uses intelligent heuristics to identify complex methods (size-based detection)
+
+�🐳 **Docker-Ready**
 - Fully containerized application
 - No local dependencies required
 - Works on any platform with Docker
@@ -37,6 +43,9 @@ RNC Project Discovery is an automated analysis tool that scans Java projects to 
 📊 **Detailed Reports**
 - Entity and business component mapping
 - JSF page discovery
+- Business rules and logic complexity analysis
+- Markdown format with tables and statistics
+- Excel workbook with 6 detailed sheets
 - Formatted console output
 - Easy-to-parse analysis data
 
@@ -49,14 +58,20 @@ RNC Project Discovery is an automated analysis tool that scans Java projects to 
 
 ## Prerequisites
 
-- **Docker** (version 20.10 or later)
+- **Docker** (version 20.10 or later) OR **Python 3.11+** (for local usage)
 - **A Java project** to analyze
 - Approximately 500MB of disk space for the Docker image
 
 ### Python Dependencies
 
-The Docker image includes the following Python packages:
+The project requires the following Python packages (included in Docker):
 - **openpyxl** - For generating Excel (.xlsx) reports
+- **javalang** - For Java AST (Abstract Syntax Tree) parsing and business rules analysis
+
+**For local installation:**
+```bash
+pip install openpyxl javalang
+```
 
 ### Install Docker
 
@@ -65,7 +80,9 @@ The Docker image includes the following Python packages:
 
 ## Quick Start
 
-### 1. Build the Docker Image
+### Option A: Using Docker (Recommended)
+
+#### 1. Build the Docker Image
 
 ```bash
 docker build -t rnc-discover:latest .
@@ -87,7 +104,36 @@ docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 \
   --push .
 ```
 
-### 2. Run Analysis on Your Project
+#### 2. Run Analysis on Your Project
+
+```bash
+docker run --rm -v /path/to/your/project:/workspace rnc-discover:latest /workspace
+```
+
+### Option B: Using Python Locally
+
+#### 1. Setup Environment
+
+```bash
+# Create virtual environment
+python3 -m venv .venv
+
+# Activate it
+source .venv/bin/activate  # On macOS/Linux
+# or
+.\.venv\Scripts\activate   # On Windows
+
+# Install dependencies
+pip install openpyxl javalang
+```
+
+#### 2. Run Analysis
+
+```bash
+python discover.py /path/to/your/java/project
+```
+
+The output folder will be created inside your project directory.
 
 ```bash
 docker run --rm -v /path/to/your/project:/data rnc-discover:latest /data
@@ -199,14 +245,26 @@ docker run --rm -it -v $(pwd)/my-project:/data rnc-discover:latest
 
 ## Examples
 
-### Example 1: Analyze a Local Java Project
+### Example 1A: Analyze Using Docker (Recommended)
 
 ```bash
-# Using Makefile
-make run PROJECT=/Users/john/projects/my-java-app
+docker run --rm -v /Users/john/projects/my-java-app:/workspace rnc-discover:latest /workspace
+```
 
-# Or using Docker directly
-docker run --rm -v /Users/john/projects/my-java-app:/data rnc-discover:latest /data
+Results in:
+- `/Users/john/projects/my-java-app/output/rnc-my-java-app.md`
+- `/Users/john/projects/my-java-app/output/rnc-my-java-app.xlsx`
+
+### Example 1B: Analyze Using Python (Local)
+
+```bash
+# Setup (first time only)
+python3 -m venv .venv
+source .venv/bin/activate
+pip install openpyxl javalang
+
+# Run analysis
+python discover.py /Users/john/projects/my-java-app
 ```
 
 Results in:
@@ -216,39 +274,47 @@ Results in:
 ### Example 2: Analyze a Project in Current Directory
 
 ```bash
-# Using Makefile
-make run PROJECT=$(pwd)
+# Using Docker
+docker run --rm -v $(pwd):/workspace rnc-discover:latest /workspace
 
-# Or using Docker directly
-docker run --rm -v $(pwd):/data rnc-discover:latest /data
+# Using Python (with venv activated)
+python discover.py $(pwd)
 ```
 
 Results in:
 - `./output/rnc-{project-name}.md`
 - `./output/rnc-{project-name}.xlsx`
 
-### Example 3: Analyze with Full Path
+### Example 3: Business Rules Analysis Output
 
-```bash
-docker run --rm \
-  -v /home/developer/workspace/enterprise-app:/data \
-  rnc-discover:latest /data
+The reports include a new **"Análise de Regras de Negócio"** (Business Rules Analysis) section that shows:
+
+```markdown
+## 5. Análise de Regras de Negócio
+
+**Total de Classes Analisadas:** 192
+**Controllers Encontrados:** 0
+**Services Encontrados:** 3
+**Métodos com Regras de Negócio:** 224
+**Número Médio de Métodos com Regras de Negócio por Controller:** 0.00
+**Número Médio de Métodos com Regras de Negócio por Service:** 1.33
+
+### Services com Regras de Negócio
+
+- **DocumentService** (src/main/java/org/primefaces/ultima/service/DocumentService.java)
+  - Métodos públicos: 2
+  - Métodos com regras: 2
+  - Métodos: createDocuments, createCheckboxDocuments
 ```
 
 ### Example 4: Copy Output Files to Local Machine
 
 ```bash
-# Run analysis and copy output folder
-docker run --rm \
-  -v $(pwd)/my-project:/data \
-  -v $(pwd)/reports:/reports \
-  rnc-discover:latest /data
+# Run analysis and extract output
+docker run --rm -v $(pwd)/my-project:/data rnc-discover:latest /data
 
-# Copy from container output to host reports folder
-docker run --rm \
-  -v $(pwd)/my-project:/data \
-  -v $(pwd)/reports:/reports \
-  rnc-discover:latest sh -c "cp output/* /reports/"
+# Files are created in my-project/output/
+ls my-project/output/
 ```
 
 ### Example 5: Run in Interactive Mode for Debugging
@@ -465,10 +531,38 @@ Informações de DB Encontradas: Não
 
 ### Output Details
 
-- **Entities**: Java classes marked with JPA annotations (`@Entity`, `@Table`)
-- **Business Components**: Service, controller, and managed bean classes (`@Service`, `@Controller`, `@Named`, etc.)
-- **JSF Pages**: View layer files used in JSF applications (`.xhtml`, `.jsf`)
-- **Database Info**: Configuration files that may contain database connection details
+#### Markdown Report (`rnc-{project-name}.md`)
+
+Contains 6 main sections:
+
+1. **Classes de Entidades** - Java classes marked with JPA annotations (`@Entity`, `@Table`)
+2. **Classes de Componentes de Negócio** - Service, controller, and managed bean classes (`@Service`, `@Controller`, `@Named`, etc.)
+3. **Páginas JSF** - View layer files used in JSF applications (`.xhtml`, `.jsf`)
+4. **Informações do Banco de Dados** - Configuration files that may contain database connection details
+5. **Análise de Regras de Negócio** - AST-based business logic analysis:
+   - Total classes analyzed
+   - Controllers and Services found
+   - Business logic method count
+   - Average business methods per Controller/Service
+   - Detailed method names for each component
+6. **Log de Execução** - Execution log with analysis details
+
+#### Excel Report (`rnc-{project-name}.xlsx`)
+
+Contains 6 worksheets:
+
+1. **Summary** - Project overview and metrics summary
+2. **Entity Classes** - Detailed entity class information
+3. **Business Components** - Business component listings with annotations found
+4. **JSF Pages** - JSF view files
+5. **Business Rules Analysis** - AST analysis with:
+   - Class name and file path
+   - Component type (Controller, Service, Repository, etc.)
+   - Count of public methods
+   - Count of business rule methods
+   - Specific method names with business logic
+   - Summary statistics with averages
+6. **Analysis Log** - Detailed execution log
 
 ## Troubleshooting
 
@@ -478,10 +572,10 @@ Informações de DB Encontradas: Não
 
 ```bash
 # ✅ Correct
-docker run --rm -v /Users/john/projects/app:/data rnc-discover:latest /data
+docker run --rm -v /Users/john/projects/app:/workspace rnc-discover:latest /workspace
 
 # ❌ Wrong (relative paths may not work)
-docker run --rm -v ./app:/data rnc-discover:latest /data
+docker run --rm -v ./app:/workspace rnc-discover:latest /workspace
 ```
 
 ### Issue: "Permission denied"
@@ -490,6 +584,16 @@ docker run --rm -v ./app:/data rnc-discover:latest /data
 
 ```bash
 chmod -R 755 /path/to/your/project
+```
+
+### Issue: "javalang não está disponível" (Local Python)
+
+**Solution**: Ensure dependencies are installed in the virtual environment:
+
+```bash
+source .venv/bin/activate  # Activate venv
+pip install javalang openpyxl
+python discover.py /path/to/project
 ```
 
 ### Issue: "No space left on device"
