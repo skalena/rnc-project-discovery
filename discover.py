@@ -3,6 +3,8 @@ import os
 import re
 import sys
 from datetime import datetime
+from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 try:
     from openpyxl import Workbook
@@ -10,6 +12,12 @@ try:
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
+
+try:
+    import javalang
+    HAS_JAVALANG = True
+except ImportError:
+    HAS_JAVALANG = False
 
 # --- Configurações ---
 # O caminho do projeto será solicitado via argumento de linha de comando.
@@ -19,6 +27,21 @@ OUTPUT_FOLDER = 'output'
 
 # Código de erro amigável quando a pasta do projeto não é fornecida
 ERROR_CODE_MISSING_PROJECT = 2
+
+# --- Estrutura de Dados para Análise de Regras de Negócios ---
+@dataclass
+class BusinessRuleMetrics:
+    """Métricas de regras de negócio para uma classe"""
+    class_name: str
+    file_path: str
+    controller_type: str
+    public_methods: int = 0
+    business_methods: int = 0
+    business_method_names: List[str] = None
+    
+    def __post_init__(self):
+        if self.business_method_names is None:
+            self.business_method_names = []
 
 # --- Padrões Comuns de Anotações/Arquivos ---
 ENTITY_PATTERNS = [
@@ -42,6 +65,7 @@ business_components = {}
 db_info_placeholder = "Nenhuma informação de DB capturada de forma automática neste script."
 analysis_log = ""
 PROJECT_PATH = ""  # Será definido na execução
+business_rules_metrics = {}  # Armazenar métricas de regras de negócio (será populado por analyze_business_rules)
 
 def analyze_java_file(filepath):
     """Analisa um arquivo .java para Entidades e Componentes de Negócio."""
@@ -99,7 +123,7 @@ def capture_database_info(project_root):
 
 def run_analysis(project_root):
     """Percorre a pasta do projeto e chama as funções de análise."""
-    global analysis_log
+    global analysis_log, business_rules_metrics
 
     analysis_log += f"Iniciando análise do projeto em: {project_root}\n"
     analysis_log += f"Hora de início: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
@@ -115,6 +139,237 @@ def run_analysis(project_root):
                 analyze_jsf_file(filepath)
 
     analysis_log += "Análise de Arquivos Concluída.\n"
+    
+    # Realizar análise de regras de negócio com AST
+    if HAS_JAVALANG:
+        analysis_log += "Iniciando análise de regras de negócio (AST)...\n"
+        business_rules_metrics = analyze_business_rules(project_root)
+        if business_rules_metrics:
+            analysis_log += f"  - Classes analisadas: {business_rules_metrics.get('total_classes', 0)}\n"
+            analysis_log += f"  - Controllers encontrados: {business_rules_metrics.get('total_controllers', 0)}\n"
+            analysis_log += f"  - Services encontrados: {business_rules_metrics.get('total_services', 0)}\n"
+            analysis_log += f"  - Métodos com regras de negócio: {business_rules_metrics.get('total_business_methods', 0)}\n"
+            if business_rules_metrics.get('total_controllers', 0) > 0:
+                analysis_log += f"  - Média de métodos por Controller: {business_rules_metrics.get('avg_business_methods_per_controller', 0):.2f}\n"
+        analysis_log += "Análise de regras de negócio concluída.\n"
+    else:
+        analysis_log += "⚠️  javalang não está disponível. Pulando análise de regras de negócio.\n"
+
+def has_business_logic_in_method(method_node) -> bool:
+    """
+    Verifica se um método contém lógica de negócio analisando a árvore AST.
+    Procura por statements de controle, operações de estado, etc.
+    """
+    if not hasattr(method_node, 'body') or not method_node.body:
+        return False
+    
+    # Ignorar métodos muito simples (getters/setters)
+    if method_node.name.startswith('get') or method_node.name.startswith('set') or method_node.name.startswith('is'):
+        return False
+    
+    # Contar statements significativos na AST
+    significant_statements = 0
+    
+    try:
+        # Iterar pelos statements no corpo do método
+        for statement in method_node.body:
+            # Contar diferentes tipos de statements como indicadores de lógica de negócio
+            if isinstance(statement, (javalang.tree.IfStatement, javalang.tree.WhileStatement, 
+                                    javalang.tree.ForStatement, javalang.tree.DoStatement,
+                                    javalang.tree.SwitchStatement)):
+                return True  # Já encontrou lógica de controle
+            
+            if isinstance(statement, javalang.tree.ThrowStatement):
+                significant_statements += 1
+            
+            if isinstance(statement, javalang.tree.ExpressionStatement):
+                expr = statement.expression
+                # Verificar se é uma chamada de método que indica operação
+                if isinstance(expr, javalang.tree.MethodInvocation):
+                    method_name = expr.member.lower() if hasattr(expr, 'member') else ''
+                    if any(x in method_name for x in ['save', 'delete', 'update', 'create', 'execute', 'query', 'persist']):
+                        return True
+                    significant_statements += 1
+                elif isinstance(expr, javalang.tree.Assignment):
+                    significant_statements += 1
+            
+            if isinstance(statement, javalang.tree.ReturnStatement):
+                # Verificar se há cálculos no return
+                if statement.value and isinstance(statement.value, (javalang.tree.BinaryOperation, 
+                                                                   javalang.tree.MethodInvocation)):
+                    significant_statements += 1
+    except Exception:
+        # Se houver erro ao processar AST, tenta fallback com string
+        pass
+    
+    # Se tem vários statements significativos, provavelmente tem lógica de negócio
+    return significant_statements >= 2
+
+
+def is_business_rule_method(method_node) -> bool:
+    """
+    Detecta se um método contém lógica de regra de negócio.
+    Tenta análise AST primeiro, depois fallback para regex.
+    """
+    if not hasattr(method_node, 'body') or method_node.body is None:
+        return False
+    
+    # Ignorar getters/setters/isXxx
+    if any(method_node.name.startswith(prefix) for prefix in ['get', 'set', 'is']):
+        return False
+    
+    # Tentar análise AST se javalang está disponível
+    if HAS_JAVALANG:
+        try:
+            if has_business_logic_in_method(method_node):
+                return True
+        except Exception:
+            pass  # Fallback para método de string
+    
+    # Fallback: análise de string
+    method_body = str(method_node.body)
+    lines_of_code = len([line for line in method_body.split('\n') if line.strip() and not line.strip().startswith('//')])
+    
+    # Métodos muito curtos são provavelmente simples
+    if lines_of_code < 2:
+        return False
+    
+    # Padrões que indicam regras de negócio
+    business_patterns = [
+        r'\bif\b', r'\belse\b', r'\bswitch\b', r'\bcase\b',      # Condicionais
+        r'\bfor\b', r'\bwhile\b', r'\bdo\b',                      # Loops
+        r'query\(', r'execute\(', r'save\(', r'delete\(',         # Operações de BD
+        r'\.add\(', r'\.remove\(', r'\.set\(', r'\.put\(',        # Modificações de estado
+        r'throw\s+', r'catch\s*\(',                                # Exceções
+        r'return\s+[^;]*[\+\-\*/%]',                               # Cálculos no retorno
+        r'\.compareTo\(', r'\.equals\(', r'\.contains\(',         # Comparações
+    ]
+    
+    for pattern in business_patterns:
+        if re.search(pattern, method_body):
+            return True
+    
+    return False
+
+
+def analyze_java_file_ast(file_path: str) -> Optional[List[BusinessRuleMetrics]]:
+    """
+    Analisa um arquivo Java usando AST e extrai métricas de regras de negócio.
+    Retorna lista de BusinessRuleMetrics para cada classe/interface encontrada.
+    """
+    if not HAS_JAVALANG:
+        return None
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        
+        if not content.strip():
+            return None
+        
+        tree = javalang.parse.parse(content)
+        metrics_list = []
+        
+        # Iterar sobre tipos (classes, interfaces) declarados no arquivo
+        for _, type_decl in tree.filter(javalang.tree.TypeDeclaration):
+            class_name = type_decl.name
+            
+            # Contar métodos e identificar métodos com regras de negócio
+            public_methods = 0
+            business_methods = 0
+            business_method_names = []
+            
+            for method in type_decl.methods:
+                # Contar apenas métodos públicos
+                if 'public' in method.modifiers:
+                    public_methods += 1
+                    
+                    # Verificar se o método contém lógica de regra de negócio
+                    if is_business_rule_method(method):
+                        business_methods += 1
+                        business_method_names.append(method.name)
+            
+            # Determinar tipo (Controller, Service, Repository, etc.)
+            class_type = "Class"
+            if hasattr(type_decl, 'name'):
+                if 'Controller' in class_name:
+                    class_type = "Controller"
+                elif 'Service' in class_name:
+                    class_type = "Service"
+                elif 'Repository' in class_name:
+                    class_type = "Repository"
+                elif 'Impl' in class_name:
+                    class_type = "Implementation"
+            
+            if public_methods > 0:  # Apenas incluir classes com métodos públicos
+                metrics = BusinessRuleMetrics(
+                    class_name=class_name,
+                    file_path=file_path,
+                    controller_type=class_type,
+                    public_methods=public_methods,
+                    business_methods=business_methods,
+                    business_method_names=business_method_names
+                )
+                metrics_list.append(metrics)
+        
+        return metrics_list if metrics_list else None
+    
+    except Exception as e:
+        # Silenciosamente falhar ao parsear - arquivo pode não ser Java válido
+        return None
+
+
+def analyze_business_rules(project_path: str) -> Dict[str, any]:
+    """
+    Analisa o projeto inteiro para regras de negócio e retorna métricas agregadas.
+    """
+    all_metrics = []
+    controllers = []
+    services = []
+    
+    # Procurar por arquivos Java
+    for root, dirs, files in os.walk(project_path):
+        for file in files:
+            if file.endswith('.java'):
+                file_path = os.path.join(root, file)
+                metrics = analyze_java_file_ast(file_path)
+                
+                if metrics:
+                    for metric in metrics:
+                        all_metrics.append(metric)
+                        if 'Controller' in metric.controller_type:
+                            controllers.append(metric)
+                        elif 'Service' in metric.controller_type:
+                            services.append(metric)
+    
+    # Calcular estatísticas
+    avg_business_methods_per_controller = 0
+    avg_business_methods_per_service = 0
+    total_business_methods = 0
+    
+    if controllers:
+        total_business_methods_controllers = sum(m.business_methods for m in controllers)
+        avg_business_methods_per_controller = total_business_methods_controllers / len(controllers)
+    
+    if services:
+        total_business_methods_services = sum(m.business_methods for m in services)
+        avg_business_methods_per_service = total_business_methods_services / len(services)
+    
+    if all_metrics:
+        total_business_methods = sum(m.business_methods for m in all_metrics)
+    
+    return {
+        'all_metrics': all_metrics,
+        'controllers': controllers,
+        'services': services,
+        'total_classes': len(all_metrics),
+        'total_controllers': len(controllers),
+        'total_services': len(services),
+        'avg_business_methods_per_controller': avg_business_methods_per_controller,
+        'avg_business_methods_per_service': avg_business_methods_per_service,
+        'total_business_methods': total_business_methods,
+    }
+
 
 def create_output_folder(project_path):
     """Cria a pasta de saída dentro do projeto se não existir."""
@@ -276,8 +531,80 @@ def generate_excel_report(folder_name, output_path):
         ws_jsf.column_dimensions['A'].width = 50
         ws_jsf.column_dimensions['B'].width = 40
 
-        # Sheet 5: Analysis Log
-        ws_log = wb.create_sheet("Analysis Log", 4)
+        # Sheet 5: Business Rules Analysis
+        ws_rules = wb.create_sheet("Business Rules Analysis", 4)
+        ws_rules['A1'] = "Business Rules Analysis"
+        ws_rules['A1'].font = title_font
+        ws_rules['A1'].fill = title_fill
+        ws_rules.merge_cells('A1:F1')
+        
+        if business_rules_metrics and HAS_JAVALANG:
+            # Headers
+            headers = ["Class Name", "File", "Type", "Public Methods", "Business Rule Methods", "Business Method Names"]
+            for col, header in enumerate(headers, start=1):
+                cell = ws_rules.cell(row=3, column=col)
+                cell.value = header
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = center_align
+                cell.border = border
+            
+            # Dados das classes
+            row = 4
+            all_metrics = business_rules_metrics.get('all_metrics', [])
+            for metric in all_metrics:
+                ws_rules[f'A{row}'] = metric.class_name
+                ws_rules[f'B{row}'] = os.path.relpath(metric.file_path, PROJECT_PATH)
+                ws_rules[f'C{row}'] = metric.controller_type
+                ws_rules[f'D{row}'] = metric.public_methods
+                ws_rules[f'E{row}'] = metric.business_methods
+                ws_rules[f'F{row}'] = ', '.join(metric.business_method_names) if metric.business_method_names else ""
+                
+                for col in ['A', 'B', 'C', 'D', 'E', 'F']:
+                    ws_rules[f'{col}{row}'].alignment = left_align
+                    ws_rules[f'{col}{row}'].border = border
+                row += 1
+            
+            # Resumo de estatísticas
+            summary_row = row + 2
+            ws_rules[f'A{summary_row}'] = "Summary Statistics"
+            ws_rules[f'A{summary_row}'].font = Font(bold=True, size=11)
+            
+            summary_row += 1
+            ws_rules[f'A{summary_row}'] = "Total Classes Analyzed:"
+            ws_rules[f'B{summary_row}'] = business_rules_metrics.get('total_classes', 0)
+            
+            summary_row += 1
+            ws_rules[f'A{summary_row}'] = "Total Controllers:"
+            ws_rules[f'B{summary_row}'] = business_rules_metrics.get('total_controllers', 0)
+            
+            summary_row += 1
+            ws_rules[f'A{summary_row}'] = "Total Services:"
+            ws_rules[f'B{summary_row}'] = business_rules_metrics.get('total_services', 0)
+            
+            summary_row += 1
+            ws_rules[f'A{summary_row}'] = "Total Business Rule Methods:"
+            ws_rules[f'B{summary_row}'] = business_rules_metrics.get('total_business_methods', 0)
+            
+            summary_row += 1
+            ws_rules[f'A{summary_row}'] = "Avg Business Methods per Controller:"
+            ws_rules[f'B{summary_row}'] = f"{business_rules_metrics.get('avg_business_methods_per_controller', 0):.2f}"
+            
+            summary_row += 1
+            ws_rules[f'A{summary_row}'] = "Avg Business Methods per Service:"
+            ws_rules[f'B{summary_row}'] = f"{business_rules_metrics.get('avg_business_methods_per_service', 0):.2f}"
+        else:
+            ws_rules['A3'] = "Business rules analysis not available (javalang not installed)"
+        
+        ws_rules.column_dimensions['A'].width = 25
+        ws_rules.column_dimensions['B'].width = 40
+        ws_rules.column_dimensions['C'].width = 15
+        ws_rules.column_dimensions['D'].width = 15
+        ws_rules.column_dimensions['E'].width = 20
+        ws_rules.column_dimensions['F'].width = 35
+
+        # Sheet 6: Analysis Log
+        ws_log = wb.create_sheet("Analysis Log", 5)
         ws_log['A1'] = "Analysis Log"
         ws_log['A1'].font = title_font
         ws_log['A1'].fill = title_fill
@@ -339,7 +666,48 @@ def generate_markdown_report(output_path):
     report += db_info_placeholder
     report += "\n\n"
 
-    report += "## 5. Log de Execução\n\n"
+    report += "## 5. Análise de Regras de Negócio\n\n"
+    if business_rules_metrics and HAS_JAVALANG:
+        report += f"**Total de Classes Analisadas:** {business_rules_metrics.get('total_classes', 0)}\n\n"
+        report += f"**Controllers Encontrados:** {business_rules_metrics.get('total_controllers', 0)}\n\n"
+        report += f"**Services Encontrados:** {business_rules_metrics.get('total_services', 0)}\n\n"
+        report += f"**Métodos com Regras de Negócio:** {business_rules_metrics.get('total_business_methods', 0)}\n\n"
+        
+        avg_per_controller = business_rules_metrics.get('avg_business_methods_per_controller', 0)
+        report += f"**Número Médio de Métodos com Regras de Negócio por Controller:** `{avg_per_controller:.2f}`\n\n"
+        
+        avg_per_service = business_rules_metrics.get('avg_business_methods_per_service', 0)
+        report += f"**Número Médio de Métodos com Regras de Negócio por Service:** `{avg_per_service:.2f}`\n\n"
+        
+        # Detalhar controllers com regras de negócio
+        controllers = business_rules_metrics.get('controllers', [])
+        if controllers:
+            report += "### Controllers com Regras de Negócio\n\n"
+            for controller in controllers:
+                rel_path = os.path.relpath(controller.file_path, PROJECT_PATH)
+                report += f"- **{controller.class_name}** ({rel_path})\n"
+                report += f"  - Métodos públicos: {controller.public_methods}\n"
+                report += f"  - Métodos com regras: {controller.business_methods}\n"
+                if controller.business_method_names:
+                    report += f"  - Métodos: {', '.join(controller.business_method_names)}\n"
+                report += "\n"
+        
+        # Detalhar services com regras de negócio
+        services = business_rules_metrics.get('services', [])
+        if services:
+            report += "### Services com Regras de Negócio\n\n"
+            for service in services:
+                rel_path = os.path.relpath(service.file_path, PROJECT_PATH)
+                report += f"- **{service.class_name}** ({rel_path})\n"
+                report += f"  - Métodos públicos: {service.public_methods}\n"
+                report += f"  - Métodos com regras: {service.business_methods}\n"
+                if service.business_method_names:
+                    report += f"  - Métodos: {', '.join(service.business_method_names)}\n"
+                report += "\n"
+    else:
+        report += "⚠️ Análise de regras de negócio não disponível (javalang não instalado).\n\n"
+
+    report += "## 6. Log de Execução\n\n"
     report += "```\n"
     report += analysis_log
     report += "```\n"

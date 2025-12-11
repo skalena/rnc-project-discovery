@@ -17,7 +17,7 @@ LABEL org.opencontainers.image.authors="skalena"
 LABEL org.opencontainers.image.version="1.0.0"
 
 # Install Python dependencies
-RUN pip install --no-cache-dir openpyxl
+RUN pip install --no-cache-dir openpyxl javalang
 
 # Copy the script to the container
 COPY discover.py .
