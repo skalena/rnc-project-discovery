@@ -168,42 +168,51 @@ def has_business_logic_in_method(method_node) -> bool:
         return False
     
     # Contar statements significativos na AST
-    significant_statements = 0
-    
     try:
         # Iterar pelos statements no corpo do método
+        var_declarations = 0
+        return_statements = 0
+        body_size = len(str(method_node.body))
+        
         for statement in method_node.body:
-            # Contar diferentes tipos de statements como indicadores de lógica de negócio
+            # Verificar diferentes tipos de statements como indicadores de lógica de negócio
+            
+            # 1. Statements de controle = definitivamente lógica de negócio
             if isinstance(statement, (javalang.tree.IfStatement, javalang.tree.WhileStatement, 
                                     javalang.tree.ForStatement, javalang.tree.DoStatement,
-                                    javalang.tree.SwitchStatement)):
-                return True  # Já encontrou lógica de controle
+                                    javalang.tree.SwitchStatement, javalang.tree.TryStatement)):
+                return True
             
+            # 2. Exceções = lógica de negócio
             if isinstance(statement, javalang.tree.ThrowStatement):
-                significant_statements += 1
+                return True
             
-            if isinstance(statement, javalang.tree.ExpressionStatement):
-                expr = statement.expression
-                # Verificar se é uma chamada de método que indica operação
-                if isinstance(expr, javalang.tree.MethodInvocation):
-                    method_name = expr.member.lower() if hasattr(expr, 'member') else ''
-                    if any(x in method_name for x in ['save', 'delete', 'update', 'create', 'execute', 'query', 'persist']):
-                        return True
-                    significant_statements += 1
-                elif isinstance(expr, javalang.tree.Assignment):
-                    significant_statements += 1
+            # 3. Variáveis locais múltiplas + retorno = provavelmente processando dados
+            if isinstance(statement, javalang.tree.LocalVariableDeclaration):
+                var_declarations += 1
             
+            # 4. Return statement
             if isinstance(statement, javalang.tree.ReturnStatement):
-                # Verificar se há cálculos no return
-                if statement.value and isinstance(statement.value, (javalang.tree.BinaryOperation, 
-                                                                   javalang.tree.MethodInvocation)):
-                    significant_statements += 1
+                return_statements += 1
+        
+        # Heurística: Se tem várias variáveis locais + return + tamanho significativo = lógica de negócio
+        has_multiple_vars = var_declarations >= 3
+        has_return = return_statements > 0
+        has_significant_size = body_size > 1000  # 1KB+
+        
+        # Se tem múltiplas variáveis OU tamanho grande, é lógica de negócio
+        if (has_multiple_vars and has_return) or has_significant_size:
+            return True
+        
+        # Se tem pelo menos 2 variáveis + retorno + código de tamanho médio
+        if var_declarations >= 2 and has_return and body_size > 500:
+            return True
+        
+        return False
+        
     except Exception:
         # Se houver erro ao processar AST, tenta fallback com string
-        pass
-    
-    # Se tem vários statements significativos, provavelmente tem lógica de negócio
-    return significant_statements >= 2
+        return False
 
 
 def is_business_rule_method(method_node) -> bool:
